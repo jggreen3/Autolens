@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/*.go": {
+      "runtime": "go1.x"
+    }
+  },
+  "files": ["api/third_party/onnxruntime.so", "api/best.onnx"]
+}
