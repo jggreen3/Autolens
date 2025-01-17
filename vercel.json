@@ -1,7 +1,6 @@
 {
   "functions": {
     "api/*.go": {
-      "runtime": "vercel-go@1.0.0",
       "includeFiles": "api/{third_party/onnxruntime.so,best.onnx}"
     }
   }
