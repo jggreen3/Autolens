@@ -45,7 +45,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	boxes, err := detect_objects_on_image(file)
+	boxes, err := DetectObjectsOnImage(file)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
