@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
@@ -31,6 +32,17 @@ type ModelSession struct {
 
 // Handler function for Vercel serverless deployment
 func Handler(w http.ResponseWriter, r *http.Request) {
+	// Add error logging
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("Panic recovered: %v\n", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
+
+	// Log each step
+	fmt.Printf("Request received: %s %s\n", r.Method, r.URL.Path)
+
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -41,33 +53,44 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		fmt.Printf("Form parsing error: %v\n", err)
 		http.Error(w, "Unable to parse form", http.StatusBadRequest)
 		return
 	}
 
 	file, _, err := r.FormFile("image_file")
 	if err != nil {
+		fmt.Printf("File retrieval error: %v\n", err)
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
+	fmt.Println("File retrieved successfully")
+
 	boxes, err := DetectObjectsOnImage(file)
 	if err != nil {
+		fmt.Printf("Object detection error: %v\n", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	fmt.Println("Object detection completed")
+
 	buf, err := json.Marshal(&boxes)
 	if err != nil {
+		fmt.Printf("JSON encoding error: %v\n", err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
 
+	fmt.Println("Response encoded successfully")
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(buf)
-}
 
+	fmt.Println("Response sent successfully")
+}
 func DetectObjectsOnImage(buf io.Reader) ([][]interface{}, error) {
 	input, img_width, img_height := prepare_input(buf)
 	output, err := RunModel(input)
