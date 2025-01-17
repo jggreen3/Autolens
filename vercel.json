@@ -1,8 +1,8 @@
 {
   "functions": {
     "api/*.go": {
-      "runtime": "go1.x"
+      "runtime": "go1.x",
+      "includeFiles": ["api/third_party/onnxruntime.so", "api/best.onnx"]
     }
-  },
-  "files": ["api/third_party/onnxruntime.so", "api/best.onnx"]
+  }
 }
