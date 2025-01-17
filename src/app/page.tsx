@@ -1,44 +1,45 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { ImageUpload } from '@/components/ui/imageUpload'
-import { CameraCapture } from '@/components/ui/cameraCapture'
-import { DetectionResults } from '@/components/ui/detectionResults'
-import { Button } from "@/components/ui/button"
-import Image from 'next/image'
+import { useState } from "react";
+import { ImageUpload } from "@/components/ui/imageUpload";
+import { CameraCapture } from "@/components/ui/cameraCapture";
+import { DetectionResults } from "@/components/ui/detectionResults";
+import { Button } from "@/components/ui/button";
+import Image from "next/image";
+import type { DetectionResultArray } from "@/components/ui/detectionResults";
 
 export default function Home() {
-  const [selectedImage, setSelectedImage] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string>('')
-  const [results, setResults] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [showCamera, setShowCamera] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [results, setResults] = useState<DetectionResultArray[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
 
   const handleImageSelect = (file: File, preview: string) => {
-    setSelectedImage(file)
-    setImagePreview(preview)
-  }
+    setSelectedImage(file);
+    setImagePreview(preview);
+  };
 
   const handleSubmit = async () => {
-    if (!selectedImage) return
+    if (!selectedImage) return;
 
-    setLoading(true)
-    const formData = new FormData()
-    formData.append('image_file', selectedImage)
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("image_file", selectedImage);
 
     try {
-      const response = await fetch('/api/detect', {
-        method: 'POST',
+      const response = await fetch("/api/detect", {
+        method: "POST",
         body: formData,
-      })
-      const data = await response.json()
-      setResults(data)
+      });
+      const data = await response.json();
+      setResults(data);
     } catch (error) {
-      console.error('Error:', error)
+      console.error("Error:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen pt-8 p-12 flex flex-col items-center">
@@ -49,15 +50,15 @@ export default function Home() {
             Discover and Identify Car Parts with AI
           </p>
           <p className="text-lg text-muted-foreground">
-            Welcome to your personal mechanic. Our advanced AI technology can recognize car parts
-             from any model instantly. Simply upload an image you need to identify, and let AutoLens
-              do the work for you.
+            Welcome to your personal mechanic. Our advanced AI technology can
+            recognize car parts from any model instantly. Simply upload an image
+            you need to identify, and let AutoLens do the work for you.
           </p>
         </div>
       </div>
 
       <div className="w-full max-w-xl space-y-6">
-        <ImageUpload 
+        <ImageUpload
           onImageSelect={handleImageSelect}
           onCameraOpen={() => setShowCamera(true)}
         />
@@ -81,17 +82,13 @@ export default function Home() {
         )}
 
         {selectedImage && (
-          <Button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full"
-          >
-            {loading ? 'Processing...' : 'Detect Objects'}
+          <Button onClick={handleSubmit} disabled={loading} className="w-full">
+            {loading ? "Processing..." : "Detect Objects"}
           </Button>
         )}
 
         {results && <DetectionResults results={results} />}
       </div>
     </div>
-  )
+  );
 }
