@@ -8,6 +8,8 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"io/ioutil"
+	"log"
 	"math"
 	"net/http"
 	"runtime"
@@ -33,6 +35,30 @@ type ModelSession struct {
 // Handler function for Vercel serverless deployment
 func Handler(w http.ResponseWriter, r *http.Request) {
 	// Add error logging
+
+	// List current directory
+	files, err := ioutil.ReadDir(".")
+	if err != nil {
+		log.Printf("Error reading directory: %v", err)
+	}
+
+	// Log all files in current directory
+	log.Printf("Current directory contents:")
+	for _, file := range files {
+		log.Printf("- %s", file.Name())
+	}
+
+	// List the specific third_party directory
+	thirdPartyFiles, err := ioutil.ReadDir("./third_party")
+	if err != nil {
+		log.Printf("Error reading third_party directory: %v", err)
+	} else {
+		log.Printf("third_party directory contents:")
+		for _, file := range thirdPartyFiles {
+			log.Printf("- %s", file.Name())
+		}
+	}
+
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Printf("Panic recovered: %v\n", err)
