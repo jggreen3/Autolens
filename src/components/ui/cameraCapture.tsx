@@ -18,16 +18,29 @@ export function CameraCapture({
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
-    console.log("Attempting to access camera....");
+    let isMounted = true; // Prevents unnecessary updates
+
     navigator.mediaDevices
       .getUserMedia({ video: true })
       .then((mediaStream) => {
-        activeStream = mediaStream; // Store active stream reference
-        console.log("Access granted", mediaStream);
+        if (!isMounted) return; // Prevent updates if component unmounted
+
+        activeStream = mediaStream;
         setStream(mediaStream);
+        console.log("MediaStream set:", mediaStream);
+
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
+
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current?.play().catch((error) => {
+              console.error("Error trying to play video:", error);
+            });
+          };
+        } else {
+          console.warn("videoRef.current is not available yet.");
         }
+
         setIsWaitingPermission(false);
       })
       .catch((error) => {
@@ -36,11 +49,22 @@ export function CameraCapture({
       });
 
     return () => {
+      isMounted = false; // Prevent state updates on unmounted component
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [onClose]);
+  }, []);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      console.log("Assigning stream to video element");
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch((error) => {
+        console.error("Error trying to play video:", error);
+      });
+    }
+  }, [stream]);
 
   const capturePhoto = () => {
     const video = videoRef.current;
@@ -61,7 +85,7 @@ export function CameraCapture({
             type: "image/jpeg",
           });
           onCapture(file, URL.createObjectURL(blob));
-          onClose(); // Close the camera component after capture
+          onClose();
         }
       }, "image/jpeg");
     }
