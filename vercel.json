@@ -3,5 +3,18 @@
     "api/*.go": {
       "includeFiles": "api/{third_party/onnxruntime.so,best.onnx}"
     }
-  }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; media-src 'self'"
+        }
+      ]
+    }
+  ]
 }
