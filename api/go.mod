@@ -8,3 +8,8 @@ require (
 )
 
 require github.com/rs/cors v1.11.1 // indirect
+
+replace (
+	yourmodule/onnxruntime => ./third_party/onnxruntime.so
+	yourmodule/model => ./best.onnx
+)
