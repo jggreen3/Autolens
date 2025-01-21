@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev:frontend": "next dev",
-    "dev:backend": "cd api && go run .",
+    "dev:backend": "cd ../backend_dev && go run .",
     "dev": "concurrently \"yarn dev:frontend\" \"yarn dev:backend\"",
     "build": "next build",
     "start": "next start",

@@ -50,9 +50,9 @@ export default function Home() {
             Discover and Identify Car Parts with AI
           </p>
           <p className="text-lg text-muted-foreground">
-            Welcome to your personal mechanic. Our advanced AI technology can
-            recognize car parts from any model instantly. Simply upload an image
-            you need to identify, and let AutoLens do the work for you.
+            Welcome to your personal mechanic. Our AI technology can recognize
+            car parts from any model instantly. Simply upload an image you need
+            to identify, and let AutoLens do the work for you.
           </p>
         </div>
       </div>

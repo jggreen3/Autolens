@@ -17,9 +17,12 @@ export function CameraCapture({
   const [isVideoActive, setIsVideoActive] = useState(true);
 
   useEffect(() => {
+    let activeStream: MediaStream | null = null;
+
     navigator.mediaDevices
       .getUserMedia({ video: true })
       .then((mediaStream) => {
+        activeStream = mediaStream; // Store active stream reference
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
@@ -27,37 +30,39 @@ export function CameraCapture({
         setIsWaitingPermission(false);
       })
       .catch((error) => {
-        console.log("Camera error:", error);
+        console.error("Camera error:", error);
         onClose();
       });
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (activeStream) {
+        activeStream.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
   const capturePhoto = () => {
-    const video = videoRef.current
-    const canvas = document.createElement('canvas')
-    
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+
     if (video && stream) {
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      const context = canvas.getContext('2d')
-      context?.drawImage(video, 0, 0)
-      
-      stream.getTracks().forEach(track => track.stop())
-      setIsVideoActive(false)
-      
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext("2d");
+      context?.drawImage(video, 0, 0);
+
+      stream.getTracks().forEach((track) => track.stop());
+      setIsVideoActive(false);
+
       canvas.toBlob((blob) => {
         if (blob) {
-          const file = new File([blob], "captured-photo.jpg", { type: "image/jpeg" })
-          onCapture(file, URL.createObjectURL(blob))
-          onClose() // Close the camera component after capture
+          const file = new File([blob], "captured-photo.jpg", {
+            type: "image/jpeg",
+          });
+          onCapture(file, URL.createObjectURL(blob));
+          onClose(); // Close the camera component after capture
         }
-      }, 'image/jpeg')
+      }, "image/jpeg");
     }
   };
 
