@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -8,20 +9,31 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"math"
 	"net/http"
+	"os"
 	"runtime"
 	"sort"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/nfnt/resize"
 	ort "github.com/yalue/onnxruntime_go"
 )
 
 var (
-	UseCoreML  = false
-	Blank      []float32
-	ModelPath  = "./best.onnx"
-	Yolo8Model ModelSession
+	UseCoreML   = false
+	Blank       []float32
+	Yolo8Model  ModelSession
+	runtimePath = "/tmp/onnxruntime.so"
+	ModelPath   = "/tmp/best.onnx"
+	initialized = false
+	bucketName  = os.Getenv("S3_BUCKET_NAME")
+	regionName  = os.Getenv("S3_REGION_NAME")
+	runtimeKey  = "onnxruntime.so"
+	modelKey    = "best.onnx"
 )
 
 type ModelSession struct {
@@ -30,9 +42,73 @@ type ModelSession struct {
 	Output  *ort.Tensor[float32]
 }
 
+func initializeFiles() error {
+	if initialized {
+		return nil
+	}
+
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionName))
+	if err != nil {
+		return fmt.Errorf("unable to load SDK config, %v", err)
+	}
+
+	s3Client := s3.NewFromConfig(cfg)
+
+	if !fileExists(runtimePath) {
+		if err := downloadFromS3(s3Client, bucketName, runtimeKey, runtimePath); err != nil {
+			return err
+		}
+	}
+
+	if !fileExists(ModelPath) {
+		if err := downloadFromS3(s3Client, bucketName, modelKey, ModelPath); err != nil {
+			return err
+		}
+	}
+
+	initialized = true
+	return nil
+}
+
+func downloadFromS3(client *s3.Client, bucket, key, filepath string) error {
+	resp, err := client.GetObject(context.TODO(), &s3.GetObjectInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get object, %v", err)
+	}
+	defer resp.Body.Close()
+
+	outFile, err := os.Create(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to create file, %v", err)
+	}
+	defer outFile.Close()
+
+	_, err = io.Copy(outFile, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to copy object to file, %v", err)
+	}
+
+	return nil
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
 // Handler function for Vercel serverless deployment
 func Handler(w http.ResponseWriter, r *http.Request) {
-	// Add error logging
+	if err := initializeFiles(); err != nil {
+		log.Printf("Error initializing files: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	defer func() {
 		if err := recover(); err != nil {
