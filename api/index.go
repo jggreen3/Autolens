@@ -47,8 +47,6 @@ func initializeFiles() error {
 		return nil
 	}
 
-	log.Printf("Initializing files with bucket: %s in region: %s", bucketName, os.Getenv("AWS_REGION"))
-
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionName))
 	if err != nil {
 		return fmt.Errorf("unable to load SDK config, %v", err)
@@ -359,7 +357,7 @@ func getSharedLibPath() string {
 		if runtime.GOARCH == "arm64" {
 			return "../third_party/onnxruntime_arm64.so"
 		}
-		return "./third_party/onnxruntime.so"
+		return "./tmp/onnxruntime.so"
 	}
 	panic("Unable to find a version of the onnxruntime library supporting this system.")
 }
