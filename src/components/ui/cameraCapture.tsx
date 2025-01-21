@@ -18,11 +18,12 @@ export function CameraCapture({
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
-
+    console.log("Attempting to access camera....");
     navigator.mediaDevices
       .getUserMedia({ video: true })
       .then((mediaStream) => {
         activeStream = mediaStream; // Store active stream reference
+        console.log("Access granted", mediaStream);
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
