@@ -47,6 +47,8 @@ func initializeFiles() error {
 		return nil
 	}
 
+	log.Printf("Initializing files with bucket: %s", bucketName)
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionName))
 	if err != nil {
 		return fmt.Errorf("unable to load SDK config, %v", err)
