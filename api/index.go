@@ -357,7 +357,7 @@ func getSharedLibPath() string {
 		if runtime.GOARCH == "arm64" {
 			return "../third_party/onnxruntime_arm64.so"
 		}
-		return "./tmp/onnxruntime.so"
+		return "/tmp/onnxruntime.so"
 	}
 	panic("Unable to find a version of the onnxruntime library supporting this system.")
 }
