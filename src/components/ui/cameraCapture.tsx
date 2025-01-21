@@ -39,7 +39,7 @@ export function CameraCapture({
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [onClose]);
 
   const capturePhoto = () => {
     const video = videoRef.current;
