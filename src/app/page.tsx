@@ -7,6 +7,7 @@ import { DetectionResults } from "@/components/ui/detectionResults";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import type { DetectionResultArray } from "@/components/ui/detectionResults";
+import useSystemDarkMode from "@/hooks/useSystemDarkMode";
 
 export default function Home() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -14,6 +15,8 @@ export default function Home() {
   const [results, setResults] = useState<DetectionResultArray[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
+
+  useSystemDarkMode();
 
   const handleImageSelect = (file: File, preview: string) => {
     setSelectedImage(file);
@@ -42,14 +45,16 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen pt-8 p-12 flex flex-col items-center">
+    <div className="min-h-screen pt-8 p-12 flex flex-col items-center bg-background dark:bg-dark-background text-foreground dark:text-dark-foreground">
       <div className="max-w-2xl text-center space-y-8 mb-12">
-        <h1 className="text-5xl font-bold">AutoLens</h1>
+        <h1 className="text-5xl font-bold text-black dark:text-gray-100">
+          AutoLens
+        </h1>
         <div className="space-y-6">
-          <p className="text-2xl text-muted-foreground">
+          <p className="text-2xl text-muted-foreground dark:text-gray-300">
             Discover and Identify Car Parts with AI
           </p>
-          <p className="text-lg text-muted-foreground">
+          <p className="text-lg text-muted-foreground dark:text-gray-400">
             Welcome to your personal mechanic. Our AI technology can recognize
             car parts from any model instantly. Simply upload an image you need
             to identify, and let AutoLens do the work for you.
@@ -76,13 +81,17 @@ export default function Home() {
               src={imagePreview}
               alt="Preview"
               fill
-              className="object-contain rounded-lg border"
+              className="object-contain rounded-lg border dark:border-gray-600"
             />
           </div>
         )}
 
         {selectedImage && (
-          <Button onClick={handleSubmit} disabled={loading} className="w-full">
+          <Button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full bg-primary dark:bg-gray-700 text-white dark:text-white hover:bg-primary-dark dark:hover:bg-gray-600"
+          >
             {loading ? "Processing..." : "Detect Objects"}
           </Button>
         )}

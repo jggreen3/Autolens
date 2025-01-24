@@ -21,19 +21,25 @@ export function DetectionResults({
   return (
     <div className="w-full max-w-xl mt-8">
       <h2 className="text-xl font-semibold mb-4">Detection Results:</h2>
-      <div className="space-y-4">
-        {results.map((result, index) => (
-          <div key={index} className="bg-white p-4 rounded-lg border">
-            <div className="flex justify-between items-center mb-2">
-              <span className="font-medium">{result[4]}</span>
-              <span className="text-sm text-muted-foreground">
-                {formatConfidence(result[5])}% confidence
-              </span>
+      {results.length === 0 ? (
+        <div className="text-center text-gray-500">
+          No objects detected. Please try again with a different picture.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {results.map((result, index) => (
+            <div key={index} className="bg-white p-4 rounded-lg border">
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-medium">{result[4]}</span>
+                <span className="text-sm text-muted-foreground">
+                  {formatConfidence(result[5])}% confidence
+                </span>
+              </div>
+              <Progress value={formatConfidence(result[5])} />
             </div>
-            <Progress value={formatConfidence(result[5])} />
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

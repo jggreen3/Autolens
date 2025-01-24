@@ -21,7 +21,7 @@ export function CameraCapture({
     let isMounted = true; // Prevents unnecessary updates
 
     navigator.mediaDevices
-      .getUserMedia({ video: true })
+      .getUserMedia({ video: { facingMode: { ideal: "environment" } } })
       .then((mediaStream) => {
         if (!isMounted) return; // Prevent updates if component unmounted
 
