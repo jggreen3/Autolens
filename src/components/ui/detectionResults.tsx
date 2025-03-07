@@ -56,7 +56,7 @@ export function DetectionResults({
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-4 max-w-3xl mx-auto">
           {sortedResults.map((result, index) => (
             <div
               key={index}

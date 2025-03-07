@@ -15,12 +15,23 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/nfnt/resize"
 	ort "github.com/yalue/onnxruntime_go"
+)
+
+// Configuration constants
+const (
+	MaxFileSize         = 10 * 1024 * 1024 // 10MB
+	ConfidenceThreshold = 0.5
+	IoUThreshold        = 0.7
+	InputWidth          = 640
+	InputHeight         = 640
 )
 
 var (
@@ -34,35 +45,61 @@ var (
 	regionName  = os.Getenv("S3_REGION_NAME")
 	runtimeKey  = "onnxruntime.so"
 	modelKey    = "best.onnx"
+	initMutex   = &sync.Mutex{} // Mutex to prevent race conditions during initialization
 )
 
+// ModelSession holds the ONNX runtime session and tensors
 type ModelSession struct {
 	Session *ort.AdvancedSession
 	Input   *ort.Tensor[float32]
 	Output  *ort.Tensor[float32]
 }
 
+// DetectionResult represents a single detection result
+type DetectionResult struct {
+	X1         float64 `json:"x1"`
+	Y1         float64 `json:"y1"`
+	X2         float64 `json:"x2"`
+	Y2         float64 `json:"y2"`
+	Label      string  `json:"label"`
+	Confidence float32 `json:"confidence"`
+}
+
 func initializeFiles() error {
+	initMutex.Lock()
+	defer initMutex.Unlock()
+
 	if initialized {
 		return nil
 	}
 
+	startTime := time.Now()
+	defer func() {
+		log.Printf("Initialization took %v", time.Since(startTime))
+	}()
+
+	if bucketName == "" || regionName == "" {
+		return fmt.Errorf("S3_BUCKET_NAME or S3_REGION_NAME environment variables not set")
+	}
+
 	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(regionName))
 	if err != nil {
-		return fmt.Errorf("unable to load SDK config, %v", err)
+		return fmt.Errorf("unable to load SDK config: %v", err)
 	}
 
 	s3Client := s3.NewFromConfig(cfg)
 
 	if !fileExists(runtimePath) {
+		log.Printf("Downloading runtime from S3: %s", runtimeKey)
 		if err := downloadFromS3(s3Client, bucketName, runtimeKey, runtimePath); err != nil {
-			return err
+			return fmt.Errorf("failed to download runtime: %v", err)
 		}
 	}
 
 	if !fileExists(ModelPath) {
+		log.Printf("Downloading model from S3: %s", modelKey)
 		if err := downloadFromS3(s3Client, bucketName, modelKey, ModelPath); err != nil {
-			return err
+			return fmt.Errorf("failed to download model: %v", err)
 		}
 	}
 
@@ -71,24 +108,27 @@ func initializeFiles() error {
 }
 
 func downloadFromS3(client *s3.Client, bucket, key, filepath string) error {
-	resp, err := client.GetObject(context.TODO(), &s3.GetObjectInput{
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	resp, err := client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get object, %v", err)
+		return fmt.Errorf("failed to get object: %v", err)
 	}
 	defer resp.Body.Close()
 
 	outFile, err := os.Create(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to create file, %v", err)
+		return fmt.Errorf("failed to create file: %v", err)
 	}
 	defer outFile.Close()
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to copy object to file, %v", err)
+		return fmt.Errorf("failed to copy object to file: %v", err)
 	}
 
 	return nil
@@ -104,22 +144,12 @@ func fileExists(filename string) bool {
 
 // Handler function for Vercel serverless deployment
 func Handler(w http.ResponseWriter, r *http.Request) {
-	if err := initializeFiles(); err != nil {
-		log.Printf("Error initializing files: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
+	startTime := time.Now()
 	defer func() {
-		if err := recover(); err != nil {
-			fmt.Printf("Panic recovered: %v\n", err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
+		log.Printf("Request processed in %v", time.Since(startTime))
 	}()
 
-	// Log each step
-	fmt.Printf("Request received: %s %s\n", r.Method, r.URL.Path)
-
+	// Set CORS headers
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -129,53 +159,97 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseMultipartForm(10 << 20); err != nil {
-		fmt.Printf("Form parsing error: %v\n", err)
-		http.Error(w, "Unable to parse form", http.StatusBadRequest)
+	// Recover from panics
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("Panic recovered: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+	}()
+
+	// Initialize files if needed
+	if err := initializeFiles(); err != nil {
+		log.Printf("Error initializing files: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	file, _, err := r.FormFile("image_file")
+	// Validate request method
+	if r.Method != "POST" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse multipart form with size limit
+	if err := r.ParseMultipartForm(MaxFileSize); err != nil {
+		log.Printf("Form parsing error: %v", err)
+		http.Error(w, "Unable to parse form or file too large", http.StatusBadRequest)
+		return
+	}
+
+	// Get file from form
+	file, header, err := r.FormFile("image_file")
 	if err != nil {
-		fmt.Printf("File retrieval error: %v\n", err)
+		log.Printf("File retrieval error: %v", err)
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
-	fmt.Println("File retrieved successfully")
-
-	boxes, err := DetectObjectsOnImage(file)
-	if err != nil {
-		fmt.Printf("Object detection error: %v\n", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// Validate file size
+	if header.Size > MaxFileSize {
+		http.Error(w, "File too large", http.StatusBadRequest)
 		return
 	}
 
-	fmt.Println("Object detection completed")
+	// Validate file type
+	contentType := header.Header.Get("Content-Type")
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/gif" {
+		http.Error(w, "Invalid file type. Only JPEG, PNG, and GIF are supported", http.StatusBadRequest)
+		return
+	}
 
+	log.Println("File retrieved successfully")
+
+	// Detect objects
+	boxes, err := DetectObjectsOnImage(file)
+	if err != nil {
+		log.Printf("Object detection error: %v", err)
+		http.Error(w, "Error processing image", http.StatusInternalServerError)
+		return
+	}
+
+	log.Println("Object detection completed")
+
+	// Marshal response
 	buf, err := json.Marshal(&boxes)
 	if err != nil {
-		fmt.Printf("JSON encoding error: %v\n", err)
+		log.Printf("JSON encoding error: %v", err)
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Println("Response encoded successfully")
+	log.Println("Response encoded successfully")
 
+	// Send response
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(buf)
 
-	fmt.Println("Response sent successfully")
+	log.Println("Response sent successfully")
 }
+
 func DetectObjectsOnImage(buf io.Reader) ([][]interface{}, error) {
-	input, img_width, img_height := prepare_input(buf)
-	output, err := RunModel(input)
+	input, img_width, img_height, err := prepareInput(buf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare input: %v", err)
 	}
 
-	data := process_output(output, img_width, img_height)
+	output, err := RunModel(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to run model: %v", err)
+	}
+
+	data := processOutput(output, img_width, img_height)
 	return data, nil
 }
 
@@ -185,18 +259,17 @@ func RunModel(input []float32) ([]float32, error) {
 	if Yolo8Model.Session == nil {
 		Yolo8Model, err = InitYolo8Session(input)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to initialize model: %v", err)
 		}
 	}
 
 	return runInference(Yolo8Model, input)
 }
 
-// Function used to convert RAW output from YOLOv8 to an array
-// of detected objects. Each object contain the bounding box of
-// this object, the type of object and the probability
-// Returns array of detected objects in a format [[x1,y1,x2,y2,object_type,probability],..]
-func process_output(output []float32, img_width, img_height int64) [][]interface{} {
+// processOutput converts RAW output from YOLOv8 to an array of detected objects.
+// Each object contains the bounding box, object type, and probability.
+// Returns array of detected objects in format [[x1,y1,x2,y2,object_type,probability],..]
+func processOutput(output []float32, img_width, img_height int64) [][]interface{} {
 	boxes := [][]interface{}{}
 	for index := 0; index < 8400; index++ {
 		class_id, prob := 0, float32(0.0)
@@ -206,7 +279,7 @@ func process_output(output []float32, img_width, img_height int64) [][]interface
 				class_id = col
 			}
 		}
-		if prob < 0.5 {
+		if prob < ConfidenceThreshold {
 			continue
 		}
 		label := yolo_classes[class_id]
@@ -214,22 +287,25 @@ func process_output(output []float32, img_width, img_height int64) [][]interface
 		yc := output[8400+index]
 		w := output[2*8400+index]
 		h := output[3*8400+index]
-		x1 := (xc - w/2) / 640 * float32(img_width)
-		y1 := (yc - h/2) / 640 * float32(img_height)
-		x2 := (xc + w/2) / 640 * float32(img_width)
-		y2 := (yc + h/2) / 640 * float32(img_height)
+		x1 := (xc - w/2) / float32(InputWidth) * float32(img_width)
+		y1 := (yc - h/2) / float32(InputHeight) * float32(img_height)
+		x2 := (xc + w/2) / float32(InputWidth) * float32(img_width)
+		y2 := (yc + h/2) / float32(InputHeight) * float32(img_height)
 		boxes = append(boxes, []interface{}{float64(x1), float64(y1), float64(x2), float64(y2), label, prob})
 	}
 
+	// Sort by confidence (highest first)
 	sort.Slice(boxes, func(i, j int) bool {
-		return boxes[i][5].(float32) < boxes[j][5].(float32)
+		return boxes[i][5].(float32) > boxes[j][5].(float32)
 	})
+
+	// Apply non-maximum suppression
 	result := [][]interface{}{}
 	for len(boxes) > 0 {
 		result = append(result, boxes[0])
 		tmp := [][]interface{}{}
 		for _, box := range boxes {
-			if iou(boxes[0], box) < 0.7 {
+			if iou(boxes[0], box) < IoUThreshold {
 				tmp = append(tmp, box)
 			}
 		}
@@ -238,14 +314,13 @@ func process_output(output []float32, img_width, img_height int64) [][]interface
 	return result
 }
 
-// Function calculates "Intersection-over-union" coefficient for specified two boxes
-// https://pyimagesearch.com/2016/11/07/intersection-over-union-iou-for-object-detection/.
+// iou calculates "Intersection-over-union" coefficient for specified two boxes
 // Returns Intersection over union ratio as a float number
 func iou(box1, box2 []interface{}) float64 {
 	return intersection(box1, box2) / union(box1, box2)
 }
 
-// Function calculates union area of two boxes
+// union calculates union area of two boxes
 // Returns Area of the boxes union as a float number
 func union(box1, box2 []interface{}) float64 {
 	box1_x1, box1_y1, box1_x2, box1_y2 := box1[0].(float64), box1[1].(float64), box1[2].(float64), box1[3].(float64)
@@ -255,7 +330,7 @@ func union(box1, box2 []interface{}) float64 {
 	return box1_area + box2_area - intersection(box1, box2)
 }
 
-// Function calculates intersection area of two boxes
+// intersection calculates intersection area of two boxes
 // Returns Area of intersection of the boxes as a float number
 func intersection(box1, box2 []interface{}) float64 {
 	box1_x1, box1_y1, box1_x2, box1_y2 := box1[0].(float64), box1[1].(float64), box1[2].(float64), box1[3].(float64)
@@ -264,65 +339,77 @@ func intersection(box1, box2 []interface{}) float64 {
 	y1 := math.Max(box1_y1, box2_y1)
 	x2 := math.Min(box1_x2, box2_x2)
 	y2 := math.Min(box1_y2, box2_y2)
+
+	// Handle case where there is no intersection
+	if x2 < x1 || y2 < y1 {
+		return 0
+	}
+
 	return (x2 - x1) * (y2 - y1)
 }
 
-// Function used to convert input image to tensor,
-// required as an input to YOLOv8 object detection
-// network.
+// prepareInput converts input image to tensor
 // Returns the input tensor, original image width and height
-func prepare_input(buf io.Reader) ([]float32, int64, int64) {
-	img, _, _ := image.Decode(buf)
+func prepareInput(buf io.Reader) ([]float32, int64, int64, error) {
+	img, _, err := image.Decode(buf)
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("failed to decode image: %v", err)
+	}
+
 	size := img.Bounds().Size()
 	img_width, img_height := int64(size.X), int64(size.Y)
-	img = resize.Resize(640, 640, img, resize.Lanczos3)
-	red := []float32{}
-	green := []float32{}
-	blue := []float32{}
-	for y := 0; y < 640; y++ {
-		for x := 0; x < 640; x++ {
+
+	// Resize image to model input dimensions
+	img = resize.Resize(uint(InputWidth), uint(InputHeight), img, resize.Lanczos3)
+
+	// Pre-allocate slices for better performance
+	pixelCount := InputWidth * InputHeight
+	input := make([]float32, 3*pixelCount)
+
+	// Extract RGB channels
+	for y := 0; y < InputHeight; y++ {
+		for x := 0; x < InputWidth; x++ {
 			r, g, b, _ := img.At(x, y).RGBA()
-			red = append(red, float32(r/257)/255.0)
-			green = append(green, float32(g/257)/255.0)
-			blue = append(blue, float32(b/257)/255.0)
+			idx := y*InputWidth + x
+			input[idx] = float32(r/257) / 255.0
+			input[idx+pixelCount] = float32(g/257) / 255.0
+			input[idx+2*pixelCount] = float32(b/257) / 255.0
 		}
 	}
-	input := append(red, green...)
-	input = append(input, blue...)
-	return input, img_width, img_height
+
+	return input, img_width, img_height, nil
 }
 
 func InitYolo8Session(input []float32) (ModelSession, error) {
 	ort.SetSharedLibraryPath(getSharedLibPath())
 	err := ort.InitializeEnvironment()
 	if err != nil {
-		return ModelSession{}, err
+		return ModelSession{}, fmt.Errorf("failed to initialize ONNX environment: %v", err)
 	}
 
-	inputShape := ort.NewShape(1, 3, 640, 640)
+	inputShape := ort.NewShape(1, 3, InputWidth, InputHeight)
 	inputTensor, err := ort.NewTensor(inputShape, input)
 	if err != nil {
-		return ModelSession{}, err
+		return ModelSession{}, fmt.Errorf("failed to create input tensor: %v", err)
 	}
 
 	outputShape := ort.NewShape(1, 54, 8400)
 	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
 	if err != nil {
-		return ModelSession{}, err
+		return ModelSession{}, fmt.Errorf("failed to create output tensor: %v", err)
 	}
 
 	options, e := ort.NewSessionOptions()
 	if e != nil {
-		return ModelSession{}, err
+		return ModelSession{}, fmt.Errorf("failed to create session options: %v", e)
 	}
+	defer options.Destroy()
 
 	if UseCoreML { // If CoreML is enabled, append the CoreML execution provider
 		e = options.AppendExecutionProviderCoreML(0)
 		if e != nil {
-			options.Destroy()
-			return ModelSession{}, err
+			return ModelSession{}, fmt.Errorf("failed to append CoreML execution provider: %v", e)
 		}
-		defer options.Destroy()
 	}
 
 	session, err := ort.NewAdvancedSession(ModelPath,
@@ -330,7 +417,7 @@ func InitYolo8Session(input []float32) (ModelSession, error) {
 		[]ort.ArbitraryTensor{inputTensor}, []ort.ArbitraryTensor{outputTensor}, options)
 
 	if err != nil {
-		return ModelSession{}, err
+		return ModelSession{}, fmt.Errorf("failed to create ONNX session: %v", err)
 	}
 
 	modelSes := ModelSession{
@@ -339,7 +426,7 @@ func InitYolo8Session(input []float32) (ModelSession, error) {
 		Output:  outputTensor,
 	}
 
-	return modelSes, err
+	return modelSes, nil
 }
 
 func getSharedLibPath() string {
@@ -418,9 +505,11 @@ var yolo_classes = []string{
 func runInference(modelSes ModelSession, input []float32) ([]float32, error) {
 	inTensor := modelSes.Input.GetData()
 	copy(inTensor, input)
+
 	err := modelSes.Session.Run()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("inference failed: %v", err)
 	}
+
 	return modelSes.Output.GetData(), nil
 }
