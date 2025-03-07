@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Camera, X } from "lucide-react";
+import { Camera, X, RefreshCw } from "lucide-react";
 
 export function CameraCapture({
   onCapture,
@@ -15,13 +15,14 @@ export function CameraCapture({
   const [isWaitingPermission, setIsWaitingPermission] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isVideoActive, setIsVideoActive] = useState(true);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
     let isMounted = true; // Prevents unnecessary updates
 
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: "environment" } } })
+      .getUserMedia({ video: { facingMode: { ideal: facingMode } } })
       .then((mediaStream) => {
         if (!isMounted) return; // Prevent updates if component unmounted
 
@@ -54,7 +55,7 @@ export function CameraCapture({
         activeStream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [facingMode]);
 
   useEffect(() => {
     if (videoRef.current && stream) {
@@ -91,12 +92,30 @@ export function CameraCapture({
     }
   };
 
+  const switchCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setFacingMode(prevMode => prevMode === 'user' ? 'environment' : 'user');
+    }
+  };
+
+  const hasFrontAndBackCamera = () => {
+    return 'mediaDevices' in navigator && 'enumerateDevices' in navigator.mediaDevices;
+  };
+
   return (
-    <div className="relative w-full h-[400px] bg-slate-100 rounded-lg flex items-center justify-center">
+    <div className="relative w-full h-[400px] bg-gray-100 dark:bg-auto-dark-card rounded-xl overflow-hidden shadow-auto">
       {isWaitingPermission ? (
-        <div className="text-center">
-          <Camera className="h-8 w-8 mx-auto mb-2" />
-          <p>Please allow camera access</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4">
+          <div className="p-4 bg-auto-blue/10 dark:bg-auto-blue/20 rounded-full animate-pulse">
+            <Camera className="h-8 w-8 text-auto-blue dark:text-auto-blue-light" />
+          </div>
+          <p className="text-lg font-medium text-gray-700 dark:text-gray-200">
+            Please allow camera access
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            We need permission to use your camera
+          </p>
         </div>
       ) : (
         <>
@@ -106,17 +125,33 @@ export function CameraCapture({
               autoPlay
               playsInline
               muted
-              className="w-full h-full object-cover rounded-lg"
+              className="w-full h-full object-cover rounded-xl"
             />
           )}
           <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4 z-10">
             <Button
               onClick={capturePhoto}
-              className="bg-green-500 hover:bg-green-600"
+              className="bg-auto-blue hover:bg-auto-blue-dark text-white button-glow"
             >
+              <Camera className="mr-2 h-4 w-4" />
               Capture Photo
             </Button>
-            <Button variant="destructive" onClick={onClose}>
+            
+            {hasFrontAndBackCamera() && (
+              <Button
+                onClick={switchCamera}
+                variant="outline"
+                className="bg-white/80 dark:bg-gray-700/80 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            )}
+            
+            <Button 
+              variant="outline" 
+              onClick={onClose}
+              className="bg-white/80 dark:bg-gray-700/80 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
+            >
               <X className="h-4 w-4" />
             </Button>
           </div>

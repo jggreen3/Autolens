@@ -30,7 +30,7 @@ You can visit the live app on Vercel ([here](https://autolens.vercel.app/)).
 
 ## About the Project
 
-As a DIY car enthusiast, I’ve often found myself stuck trying to identify a random part that I've removed—or worse, broken—while working on my car. Figuring out what a part is called or where to find a replacement can be a huge hassle. Autolens aims to solve this problem by applying computer vision to quickly and accurately identify car parts from any uploaded image.
+As a DIY car enthusiast, I've often found myself stuck trying to identify a random part that I've removed—or worse, broken—while working on my car. Figuring out what a part is called or where to find a replacement can be a huge hassle. Autolens aims to solve this problem by applying computer vision to quickly and accurately identify car parts from any uploaded image.
 
 ### Architecture:
 
@@ -71,13 +71,14 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 This is work in progress and there's a lot I'd like to do.
 
-- <strong> Expand the Training Set:</strong>Add more images, including parts installed on cars, and diversify
+- <strong>Expand the Training Set:</strong> Add more images, including parts installed on cars, and diversify
   categories for broader coverage.
-- <strong> Improve Deployment Infastructure</strong> Move away from serverless-only Vercel deployment
+- <strong>Improve Deployment Infrastructure:</strong> Move away from serverless-only Vercel deployment
   for the backend. This would allow a more flexible setup without requiring a single monolithic file
-  and reduce cold-start latency by avoiding frequent model downloads from s3.
-- <strong> Service Manual Integration:</strong> Develop a system that parses factory service manuals
+  and reduce cold-start latency by avoiding frequent model downloads from S3.
+- <strong>Service Manual Integration:</strong> Develop a system that parses factory service manuals
   based on the identified part to provide repair instructions alongside recognition results.
+- <strong>Performance Metrics:</strong> Add analytics to track model performance and user interaction patterns.
 
 ## Contributing
 
