@@ -42,3 +42,7 @@ next-env.d.ts
 
 # Testing documentation 
 README_TESTS.md
+
+# Model artifacts
+/third_party/*
+best.onnx
