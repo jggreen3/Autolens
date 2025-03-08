@@ -76,7 +76,7 @@ export default function Home() {
       <div className="w-full py-12 md:py-20 px-4 sm:px-6 md:px-12 bg-gradient-auto from-auto-blue-light to-auto-blue dark:from-auto-blue-dark dark:to-auto-blue">
         <div className="max-w-4xl mx-auto text-center space-y-6">
           <h1 className="text-4xl md:text-6xl font-bold text-white text-shadow">
-            Auto<span className="text-auto-silver">Lens</span>
+            AutoLens
           </h1>
           <p className="text-xl md:text-2xl text-white/90">
             Discover and Identify Car Parts with AI
