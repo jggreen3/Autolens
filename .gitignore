@@ -44,5 +44,5 @@ next-env.d.ts
 README_TESTS.md
 
 # Model artifacts
-/third_party/*
+/api/third_party/
 best.onnx
